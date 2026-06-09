@@ -393,11 +393,10 @@
         // Site data extracted from original file
         const siteData = {
             "Football": [
-                { name: `Pirlo TV`, url: `https://pirlotvenvivo.club/`, desc: `` },
                 { name: `Libre Fútbol / Fútbol Libre`, url: `https://futbollibre-tv.com/`, desc: `` },
                 { name: `Libre Fútbol / Fútbol Libre`, url: `http://librefutboltv.su`, desc: `` },
                 { name: `Libre Fútbol / Fútbol Libre`, url: `https://futbol-libre.su/`, desc: `` },
-                { name: `Pelota Libre TV`, url: `https://www.pelotalibrevivo.net/`, desc: `` },
+                { name: `Pelota Libre TV`, url: `https://pelota-libretv.com/`, desc: `` },
                 { name: `Roja Directa (Clone)`, url: `https://rojadirectagol.com/`, desc: `` },
                 { name: `Kooora`, url: `https://kooora.com/`, desc: `` },
                 { name: `Kooora Live`, url: `https://kooralivetv.tv/`, desc: `` },
@@ -1096,7 +1095,7 @@
             var payload = JSON.stringify({
                 runtimeId: 'free_streaming_websites',
                 state: 'mounted',
-                host: location.hostname || 'odin-browser.github.io',
+                host: location.hostname || 'browserhome.github.io',
                 createdAt: Date.now(),
                 reason: 'static_catalog_ready'
             });
@@ -1347,7 +1346,7 @@
             }
 
             function routeKey() {
-                return (location.pathname || '/freestreamingwebsites.html') +
+                return (location.pathname || '/nex-browser.github.io/freestreamingwebsites.html') +
                     (location.search || '') +
                     (location.hash || '');
             }
@@ -1533,7 +1532,7 @@
                         runtimeId: 'free_streaming_websites',
                         href: target.href,
                         sourceHost: target.hostname,
-                        currentHost: location.hostname || 'odin-browser.github.io',
+                        currentHost: location.hostname || 'browserhome.github.io',
                         createdAt: Date.now()
                     });
                     if (window.AndroidJSInterface && typeof window.AndroidJSInterface.postMessage === 'function') {
