@@ -1229,10 +1229,8 @@
                 scrollIntoViewCustom(el);
             }
 
-            // Custom scroll: keep focused element in the "sweet zone" of the viewport.
-            // - Navigating down: start scrolling when element passes 60% viewport height.
-            // - Navigating up: start scrolling when element goes above 25% viewport height.
-            // - Handles sidebar (own scroll container) vs main content (window scroll).
+            // Sidebar uses a sweet zone because it is a compact menu. Main content only
+            // scrolls when the focused card leaves the viewport to avoid page drift.
             function scrollIntoViewCustom(el) {
                 var DOWN_RATIO = 0.60;
                 var UP_RATIO = 0.25;
@@ -1257,6 +1255,19 @@
                     containerTop = 0;
                     scrollTop = window.scrollY || document.documentElement.scrollTop;
                     scrollHeight = document.documentElement.scrollHeight;
+
+                    var viewportBottom = containerHeight - PADDING;
+                    var maxWindowScroll = Math.max(0, scrollHeight - containerHeight);
+                    var targetScrollTop = scrollTop;
+                    if (elRect.top < PADDING) {
+                        targetScrollTop = scrollTop + elRect.top - PADDING;
+                    } else if (elRect.bottom > viewportBottom) {
+                        targetScrollTop = scrollTop + elRect.bottom - viewportBottom;
+                    }
+                    targetScrollTop = Math.max(0, Math.min(targetScrollTop, maxWindowScroll));
+                    if (Math.abs(targetScrollTop - scrollTop) < 1) return;
+                    window.scrollTo(0, targetScrollTop);
+                    return;
                 }
 
                 // Element position relative to the scrollable container's content
@@ -1336,6 +1347,26 @@
                 }
             }
 
+            function focusInitialCategory() {
+                if (toolbarFocusActive || getCurrentFocused()) return;
+                var target = getItems('category')[0] || getItems()[0];
+                if (!target) return;
+                tvMode = true;
+                setTvNavActive(true);
+                setFocus(target);
+            }
+
+            function scheduleInitialFocus() {
+                try {
+                    requestAnimationFrame(function() {
+                        focusInitialCategory();
+                    });
+                } catch (e) {
+                    setTimeout(focusInitialCategory, 0);
+                }
+                setTimeout(focusInitialCategory, 120);
+            }
+
             function getCurrentFocused() {
                 if (currentFocused && document.documentElement.contains(currentFocused)) {
                     return currentFocused;
@@ -1400,6 +1431,16 @@
                         }
                         var target = getCurrentFocused() || getItems('category')[0] || getItems()[0];
                         if (!target) return false;
+                        setFocus(target);
+                        lastToolbarHandoff = null;
+                        toolbarFocusActive = false;
+                        return true;
+                    },
+                    restoreAfterBrowserChrome: function(reason) {
+                        var target = getCurrentFocused() || getItems('category')[0] || getItems()[0];
+                        if (!target) return false;
+                        setTvNavActive(true);
+                        tvMode = true;
                         setFocus(target);
                         lastToolbarHandoff = null;
                         toolbarFocusActive = false;
@@ -1670,7 +1711,9 @@
                 }
             });
             window.addEventListener('resize', invalidateItemCache);
+            window.addEventListener('pageshow', scheduleInitialFocus);
             installPageNavigationBridge();
+            scheduleInitialFocus();
         }
     </script>
 </body>
