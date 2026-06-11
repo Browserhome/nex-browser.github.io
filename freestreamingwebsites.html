@@ -30,7 +30,8 @@
         }
 
         html, body {
-            overflow-x: hidden; /* 根源修复：禁止横向滚动 */
+            height: 100%;
+            overflow: hidden;
             background-color: var(--bg-color);
             color: var(--text-color);
             forced-color-adjust: none;
@@ -62,10 +63,12 @@
 
         .page-container {
             display: flex;
+            height: 100vh;
             min-height: 100vh;
             /* 确保 flex 容器本身不会撑出视口 */
             width: 100%;
             max-width: 100vw;
+            overflow: hidden;
         }
 
         /* Sidebar Styles */
@@ -133,9 +136,11 @@
             width: calc(100% - 260px);
             max-width: calc(100vw - 260px);
             padding: 20px 30px;
+            height: 100vh;
             min-height: 100vh;
             /* 防止内部绝对/固定元素撑出容器 */
             overflow-x: hidden;
+            overflow-y: auto;
         }
 
         /* Section Header */
@@ -1073,7 +1078,10 @@
             var targetId = link.getAttribute('href');
             var targetElement = document.querySelector(targetId);
             if (targetElement) {
-                targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                var mainContent = document.getElementById('main-content');
+                if (mainContent) {
+                    mainContent.scrollTop = targetElement.offsetTop - mainContent.offsetTop;
+                }
             }
 
             // Close sidebar on mobile after click
@@ -1243,14 +1251,14 @@
                 var PADDING = 10; // px buffer to avoid edge-hugging
 
                 // Determine scroll container
-                var scrollParent = el.closest('.sidebar');
-                var isSidebar = !!scrollParent;
-                var container = isSidebar ? scrollParent : null; // null = window
+                var scrollParent = el.closest('.sidebar') || el.closest('.main-content');
+                var isManagedContainer = !!scrollParent;
+                var container = isManagedContainer ? scrollParent : null; // null = window
 
                 var elRect = el.getBoundingClientRect();
                 var containerHeight, containerTop, scrollTop, scrollHeight;
 
-                if (isSidebar) {
+                if (isManagedContainer) {
                     var cRect = container.getBoundingClientRect();
                     containerHeight = cRect.height;
                     containerTop = cRect.top;
@@ -1293,17 +1301,17 @@
                 // Only scroll if actually changed
                 if (Math.abs(newScrollTop - scrollTop) < 1) return;
 
-                if (isSidebar) {
+                if (isManagedContainer) {
                     // Android System WebView can accept element.scrollTo({ behavior: 'smooth' })
                     // without actually scrolling fixed overflow containers. Use direct scrollTop
                     // for deterministic TV D-pad navigation.
-                    applySidebarScroll(container, newScrollTop);
+                    applyManagedScroll(container, newScrollTop);
                 } else {
                     window.scrollTo(0, newScrollTop);
                 }
             }
 
-            function applySidebarScroll(container, scrollTop) {
+            function applyManagedScroll(container, scrollTop) {
                 container.scrollTop = scrollTop;
                 if (Math.abs(container.scrollTop - scrollTop) > 2) {
                     try {
@@ -1454,7 +1462,8 @@
                     var sidebar = current.closest('.sidebar');
                     return !sidebar || sidebar.scrollTop <= 1;
                 }
-                return (window.scrollY || document.documentElement.scrollTop || 0) <= 1;
+                var mainContent = current.closest('.main-content');
+                return !mainContent || mainContent.scrollTop <= 1;
             }
 
             // --- Spatial scoring (from nfx scoreDirectionalCandidate) ---
@@ -1531,7 +1540,9 @@
                     var site = sites[i];
                     var rect = getRect(site);
                     if (!rect) continue;
-                    var rowTop = rect.top;
+                    var mainContent = site.closest('.main-content');
+                    var mainRect = mainContent ? mainContent.getBoundingClientRect() : { top: 0 };
+                    var rowTop = mainContent ? rect.top - mainRect.top + mainContent.scrollTop : rect.top;
                     var row = rows.find(function(item) {
                         return Math.abs(item.top - rowTop) <= rowTolerance;
                     });
@@ -1582,7 +1593,8 @@
                 var rows = getSiteRows();
                 for (var i = 0; i < rows.length; i++) {
                     if (rows[i].items.indexOf(current) >= 0) {
-                        return i === 0 || (window.scrollY || document.documentElement.scrollTop || 0) <= 1;
+                        var mainContent = current.closest('.main-content');
+                        return i === 0 || !mainContent || mainContent.scrollTop <= 1;
                     }
                 }
                 return false;
