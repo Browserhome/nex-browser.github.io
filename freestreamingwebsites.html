@@ -1196,14 +1196,17 @@
                 toolbarFocusActive = true;
             }
 
-            function setFocus(el) {
+            function setFocus(el, options) {
                 if (!el) return;
+                var shouldScroll = !options || options.scroll !== false;
                 toolbarFocusActive = false;
                 if (currentFocused === el) {
                     if (!el.classList.contains('tv-focused')) {
                         el.classList.add('tv-focused');
                     }
-                    scrollIntoViewCustom(el);
+                    if (shouldScroll) {
+                        scrollIntoViewCustom(el);
+                    }
                     return;
                 }
                 var staleFocused = currentFocused || document.querySelector('.tv-focused');
@@ -1226,7 +1229,9 @@
                     activeSidebarLink = el.classList.contains('active') ? el : null;
                 }
 
-                scrollIntoViewCustom(el);
+                if (shouldScroll) {
+                    scrollIntoViewCustom(el);
+                }
             }
 
             // Sidebar uses a sweet zone because it is a compact menu. Main content only
@@ -1308,6 +1313,38 @@
                 } else {
                     window.scrollTo(0, newScrollTop);
                 }
+            }
+
+            function scrollSiteVerticalWithAnchor(current, target, dir) {
+                if (!current || !target || (dir !== 'UP' && dir !== 'DOWN')) return false;
+                if (current.getAttribute('data-zone') !== 'site' || target.getAttribute('data-zone') !== 'site') {
+                    return false;
+                }
+                var PADDING = 10;
+                var currentRect = getRect(current);
+                var targetRect = getRect(target);
+                if (!currentRect || !targetRect) return false;
+
+                var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+                if (targetRect.top >= PADDING && targetRect.bottom <= viewportHeight - PADDING) {
+                    return false;
+                }
+
+                var currentCenterY = currentRect.top + currentRect.height / 2;
+                var targetCenterY = targetRect.top + targetRect.height / 2;
+                var delta = targetCenterY - currentCenterY;
+                if ((dir === 'DOWN' && delta <= 0) || (dir === 'UP' && delta >= 0)) return false;
+
+                var scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+                var scrollHeight = Math.max(
+                    document.documentElement.scrollHeight || 0,
+                    document.body ? document.body.scrollHeight || 0 : 0
+                );
+                var maxScroll = Math.max(0, scrollHeight - viewportHeight);
+                var newScrollTop = Math.max(0, Math.min(scrollTop + delta, maxScroll));
+                if (Math.abs(newScrollTop - scrollTop) < 1) return false;
+                window.scrollTo(0, newScrollTop);
+                return true;
             }
 
             function applySidebarScroll(container, scrollTop) {
@@ -1628,7 +1665,8 @@
                 }
 
                 if (target) {
-                    setFocus(target);
+                    var anchored = scrollSiteVerticalWithAnchor(current, target, dir);
+                    setFocus(target, anchored ? { scroll: false } : undefined);
                 } else if (isAtTopBoundary(current, dir, target)) {
                     requestToolbarHandoff(current, 'catalog-top');
                 }
