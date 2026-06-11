@@ -1234,8 +1234,9 @@
                 }
             }
 
-            // Sidebar uses a sweet zone because it is a compact menu. Main content only
-            // scrolls when the focused card leaves the viewport to avoid page drift.
+            // Keep focused items in a stable viewport band. This is intentionally
+            // the same direct-scroll model for sidebar and site grid so long-press
+            // navigation does not split focus movement from page movement.
             function scrollIntoViewCustom(el) {
                 var DOWN_RATIO = 0.60;
                 var UP_RATIO = 0.25;
@@ -1260,19 +1261,6 @@
                     containerTop = 0;
                     scrollTop = window.scrollY || document.documentElement.scrollTop;
                     scrollHeight = document.documentElement.scrollHeight;
-
-                    var viewportBottom = containerHeight - PADDING;
-                    var maxWindowScroll = Math.max(0, scrollHeight - containerHeight);
-                    var targetScrollTop = scrollTop;
-                    if (elRect.top < PADDING) {
-                        targetScrollTop = scrollTop + elRect.top - PADDING;
-                    } else if (elRect.bottom > viewportBottom) {
-                        targetScrollTop = scrollTop + elRect.bottom - viewportBottom;
-                    }
-                    targetScrollTop = Math.max(0, Math.min(targetScrollTop, maxWindowScroll));
-                    if (Math.abs(targetScrollTop - scrollTop) < 1) return;
-                    window.scrollTo(0, targetScrollTop);
-                    return;
                 }
 
                 // Element position relative to the scrollable container's content
@@ -1313,38 +1301,6 @@
                 } else {
                     window.scrollTo(0, newScrollTop);
                 }
-            }
-
-            function scrollSiteVerticalWithAnchor(current, target, dir) {
-                if (!current || !target || (dir !== 'UP' && dir !== 'DOWN')) return false;
-                if (current.getAttribute('data-zone') !== 'site' || target.getAttribute('data-zone') !== 'site') {
-                    return false;
-                }
-                var PADDING = 10;
-                var currentRect = getRect(current);
-                var targetRect = getRect(target);
-                if (!currentRect || !targetRect) return false;
-
-                var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-                if (targetRect.top >= PADDING && targetRect.bottom <= viewportHeight - PADDING) {
-                    return false;
-                }
-
-                var currentCenterY = currentRect.top + currentRect.height / 2;
-                var targetCenterY = targetRect.top + targetRect.height / 2;
-                var delta = targetCenterY - currentCenterY;
-                if ((dir === 'DOWN' && delta <= 0) || (dir === 'UP' && delta >= 0)) return false;
-
-                var scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-                var scrollHeight = Math.max(
-                    document.documentElement.scrollHeight || 0,
-                    document.body ? document.body.scrollHeight || 0 : 0
-                );
-                var maxScroll = Math.max(0, scrollHeight - viewportHeight);
-                var newScrollTop = Math.max(0, Math.min(scrollTop + delta, maxScroll));
-                if (Math.abs(newScrollTop - scrollTop) < 1) return false;
-                window.scrollTo(0, newScrollTop);
-                return true;
             }
 
             function applySidebarScroll(container, scrollTop) {
@@ -1567,6 +1523,71 @@
                 return next >= 0 && next < candidates.length ? candidates[next] : null;
             }
 
+            function getSiteRows() {
+                var sites = getItems('site');
+                var rows = [];
+                var rowTolerance = 24;
+                for (var i = 0; i < sites.length; i++) {
+                    var site = sites[i];
+                    var rect = getRect(site);
+                    if (!rect) continue;
+                    var rowTop = rect.top;
+                    var row = rows.find(function(item) {
+                        return Math.abs(item.top - rowTop) <= rowTolerance;
+                    });
+                    if (!row) {
+                        row = { top: rowTop, items: [] };
+                        rows.push(row);
+                    }
+                    row.items.push(site);
+                    row.top = (row.top * (row.items.length - 1) + rowTop) / row.items.length;
+                }
+                rows.sort(function(a, b) { return a.top - b.top; });
+                rows.forEach(function(row) {
+                    row.items.sort(function(a, b) {
+                        return getCenter(a).x - getCenter(b).x;
+                    });
+                });
+                return rows;
+            }
+
+            function findSiteVerticalByRow(current, dir) {
+                var rows = getSiteRows();
+                if (!rows.length) return null;
+                for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                    var row = rows[rowIndex];
+                    var colIndex = row.items.indexOf(current);
+                    if (colIndex < 0) continue;
+                    var nextRowIndex = rowIndex + (dir === 'DOWN' ? 1 : -1);
+                    if (nextRowIndex < 0 || nextRowIndex >= rows.length) return null;
+                    var nextRow = rows[nextRowIndex];
+                    return nextRow.items[Math.min(colIndex, nextRow.items.length - 1)] || null;
+                }
+                return null;
+            }
+
+            function findSiteHorizontalByRow(current, dir) {
+                var rows = getSiteRows();
+                for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                    var row = rows[rowIndex];
+                    var colIndex = row.items.indexOf(current);
+                    if (colIndex < 0) continue;
+                    var nextColIndex = colIndex + (dir === 'RIGHT' ? 1 : -1);
+                    return nextColIndex >= 0 && nextColIndex < row.items.length ? row.items[nextColIndex] : null;
+                }
+                return null;
+            }
+
+            function isTopVisibleSiteRow(current) {
+                var rows = getSiteRows();
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i].items.indexOf(current) >= 0) {
+                        return i === 0 || (window.scrollY || document.documentElement.scrollTop || 0) <= 1;
+                    }
+                }
+                return false;
+            }
+
             // --- Directional navigation ---
 
             var DIR_MAP = { ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT' };
@@ -1652,22 +1673,21 @@
                     }
                 } else if (zone === 'site') {
                     if (dir === 'LEFT') {
-                        // Try within grid first; if at left edge, cross-zone to sidebar
-                        target = findTarget(getItems('site'), current, 'LEFT')
+                        // Fixed row order; if at left edge, cross-zone to sidebar.
+                        target = findSiteHorizontalByRow(current, 'LEFT')
                               || findTarget(getItems('category'), current, 'LEFT');
                     } else if (dir === 'RIGHT') {
-                        // Within grid only
-                        target = findTarget(getItems('site'), current, 'RIGHT');
+                        // Fixed row order within grid.
+                        target = findSiteHorizontalByRow(current, 'RIGHT');
                     } else {
-                        // UP/DOWN: within grid
-                        target = findTarget(getItems('site'), current, dir);
+                        // UP/DOWN: fixed row/column order is stable under long-press.
+                        target = findSiteVerticalByRow(current, dir);
                     }
                 }
 
                 if (target) {
-                    var anchored = scrollSiteVerticalWithAnchor(current, target, dir);
-                    setFocus(target, anchored ? { scroll: false } : undefined);
-                } else if (isAtTopBoundary(current, dir, target)) {
+                    setFocus(target);
+                } else if (isAtTopBoundary(current, dir, target) || (dir === 'UP' && isTopVisibleSiteRow(current))) {
                     requestToolbarHandoff(current, 'catalog-top');
                 }
                 return true;
